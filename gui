@@ -1,0 +1,579 @@
+package CdotGui;
+
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.*;
+import java.net.Socket;
+import java.sql.*;
+
+public class NetworkGUI {
+    public static final String DB_URL = "jdbc:mysql://localhost:3306/test";
+    public static final String DB_USER = "root";
+    public static final String DB_PASSWORD = "ayush@5998";
+    public static final String SERVER_IP = "10.16.0.40";
+    public static final int SERVER_PORT = 26401;
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            new NetworkGUI().runGUI(); // Create an instance and start GUI
+        });
+    }
+
+
+    public void runGUI() {
+        SwingUtilities.invokeLater(() -> {
+            new NetworkGUIFrame(); // Start with the User Input frame
+        });
+    }
+
+    public class NetworkGUIFrame extends JFrame {
+        private JTextField sourceIpField, sourcePortField, destIpField, destPortField, maxCallField;
+        private JComboBox<String> callTypeComboBox;
+        private JButton submitButton, cancelButton, statsButton, filtersButton, terminateButton, historyButton;
+
+        private boolean isTerminateOn = false;
+
+        public NetworkGUIFrame() {
+            setTitle("User Input");
+            setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            setLayout(new BorderLayout(10, 10));
+
+            JPanel inputPanel = new JPanel(new GridLayout(6, 2, 10, 10));
+            inputPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+            inputPanel.add(new JLabel("Source IP:"));
+            sourceIpField = new JTextField();
+            inputPanel.add(sourceIpField);
+
+            inputPanel.add(new JLabel("Source Port:"));
+            sourcePortField = new JTextField();
+            inputPanel.add(sourcePortField);
+
+            inputPanel.add(new JLabel("Destination IP:"));
+            destIpField = new JTextField();
+            inputPanel.add(destIpField);
+
+            inputPanel.add(new JLabel("Destination Port:"));
+            destPortField = new JTextField();
+            inputPanel.add(destPortField);
+
+            inputPanel.add(new JLabel("Call Type:"));
+            String[] callTypes = {"VoLTE", "SiPP", "SiPP+IRI", "APDH"};
+            callTypeComboBox = new JComboBox<>(callTypes);
+            inputPanel.add(callTypeComboBox);
+
+            inputPanel.add(new JLabel("Max Call:"));
+            maxCallField = new JTextField();
+            inputPanel.add(maxCallField);
+
+            add(inputPanel, BorderLayout.CENTER);
+            ImageIcon img = new ImageIcon("C:\\Users\\ayush\\IdeaProjects\\CDOT\\src\\CdotGui\\cdot.png");
+                setIconImage(img.getImage());
+
+            submitButton = new JButton("Submit");
+            cancelButton = new JButton("Cancel");
+            statsButton = new JButton("Stats");
+            filtersButton = new JButton("Filters");
+            terminateButton = new JButton("Terminate");
+            historyButton = new JButton("History");
+
+            submitButton.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    submitButton.setEnabled(false);
+
+                    String sourceIp = sourceIpField.getText();
+                    String sourcePort = sourcePortField.getText();
+                    String destIp = destIpField.getText();
+                    String destPort = destPortField.getText();
+                    String callType = (String) callTypeComboBox.getSelectedItem();
+                    int numericValue = getNumericValue(callType); // Get numeric value based on call type
+                    int maxCall = Integer.parseInt(maxCallField.getText());
+
+                    if (validateInputs(sourceIp, sourcePort, destIp, destPort, maxCall)) {
+                        saveToDatabase(sourceIp, sourcePort, destIp, destPort, callType, maxCall);
+                        sendDataToServer(sourceIp, sourcePort, destIp, destPort, numericValue, maxCall);
+
+                        System.out.println("User Input:");
+                        System.out.println("Source IP: " + sourceIp);
+                        System.out.println("Source Port: " + sourcePort);
+                        System.out.println("Destination IP: " + destIp);
+                        System.out.println("Destination Port: " + destPort);
+                        System.out.println("Call Type: " + callType);
+                        System.out.println("Max Call: " + maxCall);
+                    } else {
+                        JOptionPane.showMessageDialog(NetworkGUIFrame.this,
+                                "Please enter valid data.",
+                                "Invalid Input", JOptionPane.ERROR_MESSAGE);
+                    }
+
+                    submitButton.setEnabled(true);
+                }
+            });
+
+            cancelButton.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    System.exit(0);
+                }
+            });
+
+            statsButton.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    StatsFrame statsFrame = new StatsFrame();
+                    statsFrame.setVisible(true);
+                }
+            });
+
+            filtersButton.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    FiltersFrame filtersFrame = new FiltersFrame();
+                    filtersFrame.setVisible(true);
+                }
+            });
+
+            terminateButton.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    isTerminateOn = !isTerminateOn;
+                    if (isTerminateOn) {
+                        sendTerminateCommandToServer(1);
+                    } else {
+                        sendTerminateCommandToServer(1);
+                    }
+                }
+            });
+
+            historyButton.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    HistoryFrame historyFrame = new HistoryFrame(NetworkGUIFrame.this);
+                    historyFrame.setVisible(true);
+                }
+            });
+
+            JPanel buttonPanel = new JPanel();
+            buttonPanel.add(submitButton);
+            buttonPanel.add(cancelButton);
+            buttonPanel.add(statsButton);
+            buttonPanel.add(filtersButton);
+            buttonPanel.add(terminateButton);
+            buttonPanel.add(historyButton);
+
+            add(buttonPanel, BorderLayout.SOUTH);
+
+            pack();
+            setLocationRelativeTo(null);
+            setVisible(true);
+        }
+
+        private int getNumericValue(String callType) {
+            switch (callType) {
+                case "VoLTE":
+                    return 1;
+                case "SiPP":
+                    return 2;
+                case "SiPP+IRI":
+                    return 3;
+                case "APDH":
+                    return 4;
+                default:
+                    return 0; // Default case, handle if needed
+            }
+        }
+
+        private boolean validateInputs(String sourceIp, String sourcePort, String destIp, String destPort, int maxCall) {
+            if (sourceIp.isEmpty() || sourcePort.isEmpty() || destIp.isEmpty() || destPort.isEmpty() || maxCall <= 0) {
+                return false;
+            }
+
+            if (!isValidIPv4(sourceIp) || !isValidIPv4(destIp)) {
+                return false;
+            }
+
+            try {
+                int srcPort = Integer.parseInt(sourcePort);
+                int dstPort = Integer.parseInt(destPort);
+
+                if (srcPort < 0 || srcPort > 65535 || dstPort < 0 || dstPort > 65535) {
+                    return false;
+                }
+            } catch (NumberFormatException e) {
+                return false;
+            }
+
+            return true;
+        }
+
+        private boolean isValidIPv4(String ip) {
+            String[] parts = ip.split("\\.");
+
+            if (parts.length != 4) {
+                return false;
+            }
+
+            for (String part : parts) {
+                try {
+                    int value = Integer.parseInt(part);
+                    if (value < 0 || value > 255) {
+                        return false;
+                    }
+                } catch (NumberFormatException e) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private void saveToDatabase(String sourceIp, String sourcePort, String destIp, String destPort, String callType, int maxCall) {
+            try (Connection connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD)) {
+                String query = "INSERT INTO UserInput (source_ip, source_port, dest_ip, dest_port, call_type, max_call) VALUES (?, ?, ?, ?, ?, ?)";
+                try (PreparedStatement preparedStatement = connection.prepareStatement(query)) {
+                    preparedStatement.setString(1, sourceIp);
+                    preparedStatement.setString(2, sourcePort);
+                    preparedStatement.setString(3, destIp);
+                    preparedStatement.setString(4, destPort);
+                    preparedStatement.setString(5, callType);
+                    preparedStatement.setInt(6, maxCall);
+                    preparedStatement.executeUpdate();
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+
+        private void sendDataToServer(String sourceIp, String sourcePort, String destIp, String destPort, int numericValue, int maxCall) {
+            try (Socket socket = new Socket(SERVER_IP, SERVER_PORT)) {
+                OutputStream output = socket.getOutputStream();
+                String data = numericValue + "," + sourceIp + ":" + sourcePort + ";" + destIp + ":" + destPort + ";" + maxCall;
+                output.write(data.getBytes());
+                output.flush();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        private void sendTerminateCommandToServer(int command) {
+            try (Socket socket = new Socket(SERVER_IP, SERVER_PORT)) {
+                OutputStream output = socket.getOutputStream();
+                String data =  "terminate," + command;
+                output.write(data.getBytes());
+                output.flush();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        public void pasteEntry(String sourceIp, String sourcePort, String destIp, String destPort, String callType, int maxCall) {
+            sourceIpField.setText(sourceIp);
+            sourcePortField.setText(sourcePort);
+            destIpField.setText(destIp);
+            destPortField.setText(destPort);
+            callTypeComboBox.setSelectedItem(callType);
+            maxCallField.setText(String.valueOf(maxCall));
+        }
+
+        public class StatsFrame extends JFrame {
+            private JTable statsTable;
+
+            private static final String DB_URL = "jdbc:mysql://localhost:3306/test";
+            private static final String DB_USER = "root";
+            private static final String DB_PASSWORD = "ayush@5998";
+
+            public StatsFrame() {
+                setTitle("Statistics");
+                setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+                setSize(400, 300);
+                setLocationRelativeTo(null);
+                ImageIcon img = new ImageIcon("C:\\Users\\ayush\\IdeaProjects\\CDOT\\src\\CdotGui\\cdot.png");
+                setIconImage(img.getImage());
+
+                // Create a table model with column names
+                DefaultTableModel model = new DefaultTableModel();
+                model.setColumnIdentifiers(new String[]{"Call Type", "Max Call", "Call Count"});
+
+                statsTable = new JTable(model);
+                JScrollPane scrollPane = new JScrollPane(statsTable);
+                JButton okButton = new JButton("OK");
+                okButton.addActionListener(e -> dispose());
+
+                JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+                buttonPanel.add(okButton);
+
+                JPanel mainPanel = new JPanel(new BorderLayout());
+                mainPanel.add(scrollPane, BorderLayout.CENTER);
+                mainPanel.add(buttonPanel, BorderLayout.SOUTH);
+
+                add(mainPanel);
+
+                fetchStatsData(model); // Populate the table with data from database
+            }
+
+            private void fetchStatsData(DefaultTableModel model) {
+                String sql = "SELECT call_type, MAX(max_call) AS max_call, COUNT(call_type) AS call_count FROM UserInput GROUP BY call_type";
+
+                try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+                     Statement stmt = conn.createStatement();
+                     ResultSet rs = stmt.executeQuery(sql)) {
+
+                    while (rs.next()) {
+                        String callType = rs.getString("call_type");
+                        int maxCall = rs.getInt("max_call");
+                        int callCount = rs.getInt("call_count");
+
+                        // Add row to the table model
+                        model.addRow(new Object[]{callType, maxCall, callCount});
+                    }
+
+                } catch (SQLException e) {
+                    JOptionPane.showMessageDialog(this,
+                            "Failed to fetch statistics data from database.",
+                            "Database Error", JOptionPane.ERROR_MESSAGE);
+                    e.printStackTrace();
+                }
+            }
+
+            public void main(String[] args) {
+                SwingUtilities.invokeLater(() -> {
+                    new StatsFrame().setVisible(true);
+                });
+            }
+        }
+
+
+        public class FiltersFrame extends JFrame {
+            private JTextField srcIpField, srcPortField, destIpField, destPortField, maxCallField;
+            private JComboBox<String> callTypeComboBox;
+            private DefaultTableModel tableModel;
+            private JTable resultsTable;
+
+            private static final String DB_URL = "jdbc:mysql://localhost:3306/test";
+            private static final String DB_USER = "root";
+            private static final String DB_PASSWORD = "ayush@5998";
+
+            public FiltersFrame() {
+                setTitle("Filters");
+                setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+                setSize(800, 400);
+                setLocationRelativeTo(null);
+                setResizable(true);
+                ImageIcon img = new ImageIcon("C:\\Users\\ayush\\IdeaProjects\\CDOT\\src\\CdotGui\\cdot.png");
+                setIconImage(img.getImage());
+
+                JPanel filtersPanel = new JPanel(new GridLayout(7, 2, 10, 10));
+                filtersPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+                filtersPanel.add(new JLabel("Source IP:"));
+                srcIpField = new JTextField();
+                filtersPanel.add(srcIpField);
+
+                filtersPanel.add(new JLabel("Source Port:"));
+                srcPortField = new JTextField();
+                filtersPanel.add(srcPortField);
+
+                filtersPanel.add(new JLabel("Destination IP:"));
+                destIpField = new JTextField();
+                filtersPanel.add(destIpField);
+
+                filtersPanel.add(new JLabel("Destination Port:"));
+                destPortField = new JTextField();
+                filtersPanel.add(destPortField);
+
+                filtersPanel.add(new JLabel("Call Type:"));
+                String[] callTypes = {"APDH", "SiPP", "SiPP+IRI", "VoLTE"};
+                callTypeComboBox = new JComboBox<>(callTypes);
+                filtersPanel.add(callTypeComboBox);
+
+                filtersPanel.add(new JLabel("Max Call:"));
+                maxCallField = new JTextField();
+                filtersPanel.add(maxCallField);
+
+                JButton applyButton = new JButton("Apply");
+                applyButton.addActionListener(new ActionListener() {
+                    @Override
+                    public void actionPerformed(ActionEvent e) {
+                        applyFilters();
+                    }
+                });
+                filtersPanel.add(applyButton);
+
+                add(filtersPanel, BorderLayout.NORTH);
+
+                // Initialize table model and table with column headers
+                String[] columnHeaders = {"Source IP", "Source Port", "Destination IP", "Destination Port", "Call Type", "Max Call"};
+                tableModel = new DefaultTableModel(columnHeaders, 0);
+                resultsTable = new JTable(tableModel);
+                JScrollPane scrollPane = new JScrollPane(resultsTable);
+                add(scrollPane, BorderLayout.CENTER);
+
+                pack();
+                setVisible(true);
+            }
+
+            private void applyFilters() {
+                String srcIp = srcIpField.getText();
+                String srcPort = srcPortField.getText();
+                String destIpFilter = destIpField.getText();
+                String destPortFilter = destPortField.getText();
+                String callType = (String) callTypeComboBox.getSelectedItem();
+                String maxCall = maxCallField.getText();
+
+                StringBuilder query = new StringBuilder("SELECT * FROM UserInput WHERE 1=1");
+
+                if (!srcIp.isEmpty()) {
+                    query.append(" AND source_ip = '").append(srcIp).append("'");
+                }
+
+                if (!srcPort.isEmpty()) {
+                    query.append(" AND source_port = '").append(srcPort).append("'");
+                }
+
+                if (!destIpFilter.isEmpty()) {
+                    query.append(" AND dest_ip = '").append(destIpFilter).append("'");
+                }
+
+                if (!destPortFilter.isEmpty()) {
+                    query.append(" AND dest_port = '").append(destPortFilter).append("'");
+                }
+
+                if (callType != null && !callType.isEmpty()) {
+                    query.append(" AND call_type = '").append(callType).append("'");
+                }
+
+                if (!maxCall.isEmpty()) {
+                    query.append(" AND max_call = ").append(maxCall);
+                }
+
+                SwingUtilities.invokeLater(() -> {
+                    try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+                         Statement stmt = conn.createStatement();
+                         ResultSet rs = stmt.executeQuery(query.toString())) {
+
+                        System.out.println("Database connected and query executed.");
+
+                        // Clear existing table data
+                        tableModel.setRowCount(0);
+
+                        boolean hasResults = false;
+
+                        while (rs.next()) {
+                            hasResults = true;
+                            String sourceIp = rs.getString("source_ip");
+                            String sourcePort = rs.getString("source_port");
+                            String destIp = rs.getString("dest_ip");
+                            String destPort = rs.getString("dest_port");
+                            String callTypeResult = rs.getString("call_type");
+                            int maxCallResult = rs.getInt("max_call");
+
+                            // Add row to the table model
+                            tableModel.addRow(new Object[]{sourceIp, sourcePort, destIp, destPort, callTypeResult, maxCallResult});
+                        }
+
+                        if (!hasResults) {
+                            JOptionPane.showMessageDialog(this, "No results found.");
+                        }
+
+                        // Notify the table that the data has changed
+                        tableModel.fireTableDataChanged();
+
+                    } catch (SQLException e) {
+                        e.printStackTrace();
+                        JOptionPane.showMessageDialog(this,
+                                "Failed to apply filters and retrieve data from the database.",
+                                "Database Error", JOptionPane.ERROR_MESSAGE);
+                    }
+                });
+            }
+
+            public void main(String[] args) {
+                SwingUtilities.invokeLater(new Runnable() {
+                    @Override
+                    public void run() {
+                        new FiltersFrame().setVisible(true);
+                    }
+                });
+            }
+        }
+
+        public class HistoryFrame extends JFrame {
+        private JTable historyTable;
+        private NetworkGUIFrame mainFrame; // Reference to the main frame
+
+        public HistoryFrame(NetworkGUIFrame mainFrame) {
+            this.mainFrame = mainFrame;
+
+            setTitle("History");
+            setSize(800, 400);
+            setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+            setLayout(new BorderLayout(10, 10));
+
+            historyTable = new JTable();
+            historyTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+            JScrollPane scrollPane = new JScrollPane(historyTable);
+
+            add(scrollPane, BorderLayout.CENTER);
+            ImageIcon img = new ImageIcon("C:\\Users\\ayush\\IdeaProjects\\CDOT\\src\\CdotGui\\cdot.png");
+                setIconImage(img.getImage());
+
+            JButton pasteButton = new JButton("Paste Selected Entry");
+            pasteButton.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    int selectedRow = historyTable.getSelectedRow();
+                    if (selectedRow != -1) {
+                        DefaultTableModel model = (DefaultTableModel) historyTable.getModel();
+                        String sourceIp = (String) model.getValueAt(selectedRow, 0);
+                        String sourcePort = (String) model.getValueAt(selectedRow, 1);
+                        String destIp = (String) model.getValueAt(selectedRow, 2);
+                        String destPort = (String) model.getValueAt(selectedRow, 3);
+                        String callType = (String) model.getValueAt(selectedRow, 4);
+                        int maxCall = (int) model.getValueAt(selectedRow, 5);
+                        mainFrame.pasteEntry(sourceIp, sourcePort, destIp, destPort, callType, maxCall);
+                        dispose();
+                    } else {
+                        JOptionPane.showMessageDialog(HistoryFrame.this,
+                                "Please select a row to paste.",
+                                "No Selection", JOptionPane.WARNING_MESSAGE);
+                    }
+                }
+            });
+
+            add(pasteButton, BorderLayout.SOUTH);
+
+            loadHistoryData();
+        }
+
+        private void loadHistoryData() {
+            try (Connection connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD)) {
+                String query = "SELECT source_ip, source_port, dest_ip, dest_port, call_type, max_call FROM UserInput ORDER BY id DESC LIMIT 5";
+                try (Statement statement = connection.createStatement();
+                     ResultSet resultSet = statement.executeQuery(query)) {
+                    DefaultTableModel model = new DefaultTableModel(
+                            new Object[]{"Source IP", "Source Port", "Destination IP", "Destination Port", "Call Type", "Max Call"}, 0);
+                    while (resultSet.next()) {
+                        String sourceIp = resultSet.getString("source_ip");
+                        String sourcePort = resultSet.getString("source_port");
+                        String destIp = resultSet.getString("dest_ip");
+                        String destPort = resultSet.getString("dest_port");
+                        String callType = resultSet.getString("call_type");
+                        int maxCall = resultSet.getInt("max_call");
+                        model.addRow(new Object[]{sourceIp, sourcePort, destIp, destPort, callType, maxCall});
+                    }
+                    historyTable.setModel(model);
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+    }
+}
+
+
+
+
